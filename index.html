@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Detector de figuras geométricas</title>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#1c2430;--mut:#6b7380;--acc:#1f4e79;--ok:#1e7a4a;--bad:#b3392b;--line:#dcd8cf}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,sans-serif}
+header{background:var(--acc);color:#fff;padding:22px 20px}header h1{margin:0;font-size:22px}header p{margin:4px 0 0;opacity:.8;font-size:14px}
+nav{display:flex;gap:4px;padding:0 16px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:0;background:none;padding:12px 14px;font:inherit;cursor:pointer;color:var(--mut);border-bottom:3px solid transparent;white-space:nowrap}
+nav button.on{color:var(--acc);border-color:var(--acc);font-weight:600}
+main{max-width:960px;margin:0 auto;padding:18px 16px 50px}section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.row{display:flex;gap:14px;flex-wrap:wrap}.row>*{flex:1 1 300px}
+#drop{border:2px dashed var(--acc);border-radius:10px;padding:26px;text-align:center;cursor:pointer;color:var(--acc)}
+#drop.over{background:#e8eef5}canvas{max-width:100%;border:1px solid var(--line);background:#fff;border-radius:6px}
+.res{font-size:22px;font-weight:700}.ok{color:var(--ok)}.bad{color:var(--bad)}
+.bar{height:8px;background:#e6e3db;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--acc)}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.grid div{text-align:center;font-size:12px;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px;background:#fff}
+.grid img{width:100%}code,pre{background:#eee9df;border-radius:4px;font-size:13px}pre{padding:10px;overflow:auto}code{padding:1px 4px}
+#estado{padding:10px 14px;background:#fff7e0;border:1px solid #ecd9a0;border-radius:8px;margin-bottom:14px}
+h2{margin:0 0 6px;font-size:17px}h3{margin:14px 0 4px;font-size:15px}.mut{color:var(--mut);font-size:13px}
+</style></head><body>
+<header><h1>Detector de figuras geométricas para manufactura</h1>
+<p>Python en el navegador (Pyodide) · visión por computador, grafo representativo, búsqueda y algoritmo genético</p></header>
+<nav id="tabs"><button data-t="det" class="on">Detectar</button><button data-t="alg">Algoritmos</button>
+<button data-t="bib">Biblioteca de figuras</button><button data-t="gen">Genético</button></nav>
+<main>
+<div id="estado">Cargando Python y librerías (la primera vez tarda unos segundos)…</div>
+
+<section id="det" class="on">
+ <div class="card"><div id="drop">Arrastra una imagen aquí o haz clic para elegirla<br><span class="mut">PNG/JPG de 512 × 512, fondo blanco, figura negra. Nada se sube a ningún servidor.</span></div>
+ <input id="file" type="file" accept="image/*" hidden></div>
+ <div class="row" id="out" style="display:none">
+  <div class="card"><canvas id="cv" width="512" height="512"></canvas><p class="mut">Rojo: contorno · azul: vértices del grafo (Douglas-Peucker)</p></div>
+  <div class="card" id="info"></div>
+ </div>
+</section>
+
+<section id="alg">
+ <div class="card"><h2>Flujo</h2><p>Imagen → gris → <b>Otsu</b> → contorno externo y huecos → vector de 10 características → <b>grafo</b> → búsqueda de la plantilla más cercana → umbral de rechazo.</p></div>
+ <div class="card"><h2>Preprocesado</h2><p>Filtro gaussiano, umbral de <b>Otsu</b> (maximiza la varianza entre fondo y figura), apertura/cierre morfológico, componente mayor. El contorno se obtiene con <code>find_contours</code> y los huecos son regiones de fondo que no tocan el borde.</p></div>
+ <div class="card"><h2>Características</h2><p>Vértices (Douglas-Peucker, ε = 2 % del perímetro), solidez (área / envolvente convexa), aspecto (rectángulo mínimo rotado), huecos, CV radial y su logaritmo, y los 4 primeros momentos de Hu (invariantes a rotación, escala y traslación; se recortan a 10⁻⁷ para evitar inestabilidad en figuras simétricas).</p></div>
+ <div class="card"><h2>Grafo representativo</h2><p>Ciclo de n vértices; cada nodo guarda su ángulo interior y cada arista su longitud normalizada. La distancia entre grafos es el mínimo sobre todos los desplazamientos cíclicos y ambos sentidos. Si el número de vértices difiere, la distancia es infinita. Actúa como <b>verificación</b>: si no coincide, la confianza se multiplica por 0.7.</p></div>
+ <div class="card"><h2>Problemas de búsqueda</h2><p><b>1-NN:</b> distancia euclidiana ponderada <code>√Σ wₖ((xₖ−pₖ)/sₖ)²</code> contra las plantillas; es exhaustiva y óptima. <b>BFS/DFS:</b> recorren el grafo (se muestra el orden de vértices). <b>A*</b> aplica a la alineación de grafos (aquí, con n pequeño, se prueban todos los desplazamientos).</p></div>
+ <div class="card"><h2>Algoritmo genético</h2><p>Cromosoma: 10 pesos + umbral (×8). Población 40, torneo de 3, cruce uniforme, mutación 0.1 con σ = 0.15, elitismo, 30 generaciones. Aptitud = 0.6·aciertos aceptados + 0.4·desconocidas rechazadas.</p></div>
+ <div class="card"><h2>Decisión</h2><p>Si <code>d_min &gt; umbral</code> → «figura no reconocida». Si no, se muestra la plantilla y la confianza <code>1 − d_min/umbral</code>.</p></div>
+</section>
+
+<section id="bib"><div class="card"><h2>Biblioteca (19 figuras)</h2><p class="mut">Haz clic en una figura para probarla en el detector.</p><div class="grid" id="grid"></div></div>
+ <div class="card"><table id="tbl"></table></div></section>
+
+<section id="gen"><div class="card"><h2>Convergencia</h2><canvas id="cg" width="700" height="280"></canvas></div>
+ <div class="card"><h2>Pesos aprendidos</h2><div id="pesos"></div><p class="mut" id="resumen"></p></div></section>
+</main>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const $=s=>document.querySelector(s);let py,DET,PL;
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
+ document.querySelectorAll('#tabs button,section').forEach(e=>e.classList.remove('on'));b.classList.add('on');$('#'+b.dataset.t).classList.add('on')});
+
+async function iniciar(){
+ try{
+  PL=await (await fetch('plantillas.json')).json(); poblar();
+  py=await loadPyodide();
+  await py.loadPackage(['numpy','scipy','scikit-image','networkx']);
+  for(const f of ['detector.py','genetico.py','plantillas.json'])
+   py.FS.writeFile(f,await (await fetch(f)).text());
+  py.runPython(`
+import json, numpy as np
+from detector import Detector
+DET = Detector('plantillas.json')
+def detectar(buf, h, w):
+    g = np.array(buf.to_py(), dtype=np.uint8).reshape(h, w)
+    return json.dumps(DET.clasificar(g))
+`);
+  DET=py.globals.get('detectar');
+  $('#estado').style.display='none';
+ }catch(e){$('#estado').textContent='Error al cargar: '+e;$('#estado').style.background='#fde4e0'}
+}
+
+function poblar(){
+ $('#grid').innerHTML=PL.nombres.map((n,i)=>`<div data-i="${i}"><img src="figuras/${pad(i)}_${n.replace(' ','_')}.png"><br>${n}</div>`).join('');
+ document.querySelectorAll('#grid div').forEach(d=>d.onclick=()=>{
+  document.querySelector('[data-t=det]').click();cargar('figuras/'+d.querySelector('img').getAttribute('src').split('/')[1])});
+ $('#tbl').innerHTML='<tr><th>Figura</th>'+PL.FN.map(f=>`<th>${f}</th>`).join('')+'</tr>'+
+  PL.nombres.map((n,i)=>`<tr><td>${n}</td>`+PL.P[i].map(v=>`<td>${(+v).toFixed(2)}</td>`).join('')+'</tr>').join('');
+ $('#pesos').innerHTML=PL.FN.map((f,i)=>`<div style="display:flex;gap:8px;align-items:center;margin:3px 0"><span style="width:110px">${f}</span><div class="bar" style="flex:1"><i style="width:${PL.w[i]*100}%"></i></div><b style="width:40px">${PL.w[i].toFixed(2)}</b></div>`).join('');
+ const r=PL.resultados;
+ $('#resumen').innerHTML=`Umbral τ = ${PL.tau.toFixed(3)}. Prueba sintética (${r.ntest} imágenes con rotación, escala, desplazamiento, ruido y desenfoque): acierto con umbral ${(r.acierto_con_umbral*100).toFixed(1)} %, rechazo de desconocidas ${(r.rechazo_desconocidas*100).toFixed(1)} % (${r.nunk} imágenes).`;
+ curva();
+}
+function pad(i){const n=[1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20][i];return String(n).padStart(2,'0')}
+function curva(){
+ const c=$('#cg'),x=c.getContext('2d'),H=PL.hist,W=c.width,Hh=c.height,m=40;x.clearRect(0,0,W,Hh);
+ const ys=v=>Hh-m-(v-0.4)/0.6*(Hh-2*m),xs=i=>m+i/(H.length-1)*(W-2*m);
+ x.strokeStyle='#ddd';x.fillStyle='#666';x.font='11px sans-serif';
+ for(let v=0.4;v<=1.001;v+=0.1){x.beginPath();x.moveTo(m,ys(v));x.lineTo(W-m,ys(v));x.stroke();x.fillText(v.toFixed(1),6,ys(v)+4)}
+ [[0,'#1f77b4',[]],[1,'#ff7f0e',[5,4]]].forEach(([k,col,d])=>{x.strokeStyle=col;x.setLineDash(d);x.lineWidth=2;x.beginPath();
+  H.forEach((h,i)=>{const y=ys(Math.max(0.4,h[k]));i?x.lineTo(xs(i),y):x.moveTo(xs(i),y)});x.stroke()});
+ x.setLineDash([]);x.fillStyle='#1f77b4';x.fillText('— mejor',W-120,16);x.fillStyle='#ff7f0e';x.fillText('- - promedio',W-120,30);
+ x.fillStyle='#666';x.fillText('generación',W/2-20,Hh-8);
+}
+
+$('#drop').onclick=()=>$('#file').click();
+$('#file').onchange=e=>e.target.files[0]&&cargar(URL.createObjectURL(e.target.files[0]));
+['dragover','dragleave','drop'].forEach(ev=>$('#drop').addEventListener(ev,e=>{e.preventDefault();
+ $('#drop').classList.toggle('over',ev==='dragover');if(ev==='drop'&&e.dataTransfer.files[0])cargar(URL.createObjectURL(e.dataTransfer.files[0]))}));
+
+function cargar(url){
+ if(!DET){$('#estado').style.display='block';$('#estado').textContent='Python todavía está cargando, intenta de nuevo en unos segundos.';return}
+ const img=new Image();img.onload=()=>{
+  const cv=$('#cv'),x=cv.getContext('2d',{willReadFrequently:true});x.fillStyle='#fff';x.fillRect(0,0,512,512);x.drawImage(img,0,0,512,512);
+  const d=x.getImageData(0,0,512,512).data,g=new Uint8Array(512*512);
+  for(let i=0;i<g.length;i++)g[i]=(0.299*d[4*i]+0.587*d[4*i+1]+0.114*d[4*i+2]);
+  const aviso=(img.width!==512||img.height!==512)?`<p class="bad">Aviso: la imagen es de ${img.width}×${img.height}; el sistema solo promete 512×512 (se reescaló).</p>`:'';
+  $('#out').style.display='flex';$('#info').innerHTML='Procesando…';
+  setTimeout(()=>{
+   const r=JSON.parse(DET(g,512,512));
+   if(!r.ok){$('#info').innerHTML=aviso+`<p class="res bad">${r.msg}</p>`;return}
+   x.strokeStyle='red';x.lineWidth=2;x.beginPath();r.contorno.forEach((p,i)=>i?x.lineTo(p[1],p[0]):x.moveTo(p[1],p[0]));x.stroke();
+   x.fillStyle='#1f4e9f';r.poly.forEach(p=>{x.beginPath();x.arc(p[1],p[0],5,0,7);x.fill()});
+   const t=r.reconocida?`<div class="res ok">${r.figura}</div><div class="mut">Confianza ${(r.conf*100).toFixed(0)} %</div><div class="bar"><i style="width:${r.conf*100}%"></i></div>`
+    :`<div class="res bad">Figura no reconocida</div><div class="mut">Más cercana: ${r.figura}, pero d = ${r.dmin.toFixed(2)} supera el umbral ${r.tau.toFixed(2)}.</div>`;
+   $('#info').innerHTML=aviso+t+`<h3>Búsqueda (1-NN)</h3><table>${r.top3.map(a=>`<tr><td>${a[0]}</td><td>${a[1].toFixed(3)}</td></tr>`).join('')}</table>
+    <h3>Características</h3><table>${PL.FN.map((f,i)=>`<tr><td>${f}</td><td>${r.x[i].toFixed(3)}</td></tr>`).join('')}</table>
+    <h3>Grafo</h3><p class="mut">${r.ang.length} vértices · ángulos ${r.ang.join(', ')}°<br>longitudes ${r.long.join(', ')}<br>BFS: ${r.bfs.join('→')} · DFS: ${r.dfs.join('→')}<br>distancia al grafo de la plantilla: ${r.grafo_d===null?'∞ (distinto nº de vértices)':r.grafo_d.toFixed(3)}</p>`;
+  },30)};
+ img.onerror=()=>alert('No se pudo leer la imagen');img.src=url;
+}
+iniciar();
+</script></body></html>
